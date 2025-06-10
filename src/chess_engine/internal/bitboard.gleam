@@ -27,3 +27,13 @@ pub fn add_to_bitboard(bitboard: BitBoard, location: Int) -> BitBoard {
 pub fn remove_from_bitboard(bitboard: BitBoard, location: Int) -> BitBoard {
   int.bitwise_and(bitboard, not(bitboard_of(location)))
 }
+
+pub fn value_on_bitboard(bitboard: BitBoard, at location: Int) -> Int {
+  remove_from_bitboard(bitboard, location)
+  |> int.bitwise_shift_left(location - 1)
+}
+
+pub fn is_on_bitboard(bitboard: BitBoard, at location: Int) -> Bool {
+  value_on_bitboard(bitboard, at: location)
+  |> fn(x) { x == 1 }
+}
