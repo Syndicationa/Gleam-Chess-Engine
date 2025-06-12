@@ -1,78 +1,51 @@
 import chess_engine/internal/bitboard.{type BitBoard}
 import chess_engine/internal/board.{
-  type Board, type Color, type Piece, Bishop, Black, King, Knight, Pawn, Queen,
-  Rook, White,
+  type Board, type CastleState, type Color, type Piece, Bishop, Black, Both,
+  King, KingSide, Knight, NoCastle, Pawn, Queen, QueenSide, Rook, White,
 }
 import chess_engine/internal/move.{
   type Move, Capture, Castle, CastleKingSide, CastleQueenSide, EnPassant, Move,
   Normal, Promotion, PromotionCapture,
 }
 import chess_engine/internal/move_dictionary.{
-  type BishopMove, type RookMove, type SlidingDictionary,
+  type BishopMove, type MoveDictionary, type RookMove,
 }
 import gleam/bool
-import gleam/dict.{type Dict}
+import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import gleam/yielder
 
-const knight_moves = [
-  #(2, 1),
-  #(1, 2),
-  #(-2, 1),
-  #(-1, 2),
-  #(2, -1),
-  #(1, -2),
-  #(-2, -1),
-  #(-1, -2),
-]
-
-const king_moves = [
-  #(1, 1),
-  #(1, 1),
-  #(-1, 1),
-  #(-1, 1),
-  #(1, -1),
-  #(1, -1),
-  #(-1, -1),
-  #(-1, -1),
-]
-
-fn long_bit_length(number: Int, count: Int) -> Int {
+fn fast_bit_length(number: Int, count: Int) -> Int {
   case number {
-    //This should never get hit
-    0 -> count
-    1 -> count + 1
+    0b0 -> 0 + count
+    0b1 -> 1 + count
+    0b10 -> 2 + count
+    0b100 -> 3 + count
+    0b1000 -> 4 + count
+    0b10000 -> 5 + count
+    0b100000 -> 6 + count
+    0b1000000 -> 7 + count
+    0b10000000 -> 8 + count
+    num if num >= 0b1_0000_0000_0000_0000_0000_0000_0000_0000 ->
+      int.bitwise_shift_right(num, 32)
+      |> fast_bit_length(count + 32)
+    num if num >= 0b1_0000_0000_0000_0000 ->
+      int.bitwise_shift_right(num, 16)
+      |> fast_bit_length(count + 16)
+    num if num >= 0b1_0000_0000 ->
+      int.bitwise_shift_right(num, 8)
+      |> fast_bit_length(count + 8)
     num ->
       int.bitwise_shift_right(num, 1)
-      |> long_bit_length(count + 1)
+      |> fast_bit_length(count + 1)
   }
 }
 
-///This covers some powers of 2 or passes it onto long bit length
-fn faster_bit_length(number: Int) -> Int {
-  case number {
-    0 -> 0
-    1 -> 1
-    2 -> 2
-    4 -> 3
-    8 -> 4
-    16 -> 5
-    32 -> 6
-    64 -> 7
-    128 -> 8
-    256 -> 9
-    1024 -> 10
-    2048 -> 11
-    4096 -> 12
-    8192 -> 13
-    16_384 -> 14
-    32_768 -> 15
-    65_536 -> 16
-    _ -> long_bit_length(number, 0)
-  }
+///This should require only about 3 or 4 calls to fast_bit_length
+fn bit_length(number: Int) -> Int {
+  fast_bit_length(number, 0)
 }
 
 fn generate_slides(
@@ -93,11 +66,8 @@ fn generate_slides(
     |> int.bitwise_or(player)
 
   let count =
-    complete
-    |> int.bitwise_not
-    |> int.add(1)
-    |> int.bitwise_and(complete)
-    |> faster_bit_length()
+    bitboard.isolate_lsb(complete)
+    |> bit_length()
     |> int.subtract(1)
 
   list.take(square_list, count)
@@ -106,6 +76,7 @@ fn generate_slides(
 pub type GenerationError {
   LocationBeyond64
   InvalidPieceType(Piece)
+  UnknownCheck
 }
 
 fn generate_rook_moves(
@@ -160,7 +131,7 @@ fn generate_bishop_moves(
 }
 
 fn generate_sliding_move(
-  table: SlidingDictionary,
+  table: MoveDictionary,
   piece: Piece,
   location: Int,
   friendly: BitBoard,
@@ -181,40 +152,55 @@ fn generate_sliding_move(
   }
 }
 
+///Taking in the list of moves and the friendly BitBoard, it filters all the 
 fn generate_moves_from_list(
-  move_list: List(#(Int, Int)),
-  location: Int,
+  move_list: List(Int),
   friendly: BitBoard,
 ) -> List(Int) {
   move_list
-  |> list.filter_map(fn(value) {
-    let #(d_x, d_y) = value
-    let x = int.bitwise_and(location, 0o0_7)
-    let y = int.bitwise_and(location, 0o7_0)
-
-    case x + d_x, y + d_y {
-      x, y if x < 0 || y < 0 || x >= 8 || y >= 8 -> Error(Nil)
-      x, y -> int.bitwise_shift_left(y, 3) + x |> Ok
-    }
-    |> result.try(fn(new_location) {
-      case bitboard.value_on_bitboard(friendly, new_location) {
-        1 -> Error(Nil)
-        n -> Ok(n)
-      }
-    })
+  |> list.filter(fn(location) {
+    bitboard.is_on_bitboard(friendly, location)
+    |> bool.negate()
   })
 }
 
-fn generate_castles(player_castle_state) {
-  todo
+fn generate_castles(
+  color: Color,
+  all_bitboard: Int,
+  player_castle_state: CastleState,
+) {
+  let queen_side = 0b00001110
+  let king_side = 0b01100000
+
+  let shift_value = case color {
+    White -> 0
+    Black -> 56
+  }
+
+  let all_bitboard = int.bitwise_shift_right(all_bitboard, shift_value)
+
+  let can_king_side = int.bitwise_and(king_side, all_bitboard) == 0
+  let can_queen_side = int.bitwise_and(queen_side, all_bitboard) == 0
+
+  case player_castle_state {
+    NoCastle -> []
+    Both if can_king_side && can_queen_side -> [
+      2 + shift_value,
+      6 + shift_value,
+    ]
+    Both | KingSide if can_king_side -> [6 + shift_value]
+    Both | QueenSide if can_queen_side -> [2 + shift_value]
+    _ -> []
+  }
 }
 
+///Generates pawn moves from the pawn's location, it's color, the friendly and enemy bitboards, and the en passant square
 fn generate_pawn_moves(
   location: Int,
   direction: Color,
   friendly: BitBoard,
   enemy: BitBoard,
-  en_passant_square: Int,
+  en_passant_square: Option(Int),
 ) {
   let rank = int.bitwise_shift_right(location, 3)
   let file = int.bitwise_and(location, 7)
@@ -248,14 +234,14 @@ fn generate_pawn_moves(
     enemy
     |> bitboard.value_on_bitboard(attack_left)
     |> fn(x) { x == 1 }
-    |> bool.or(en_passant_square == attack_right)
+    |> bool.or(en_passant_square == Some(attack_left))
     |> bool.and(file > 0)
 
   let can_attack_right =
     enemy
     |> bitboard.value_on_bitboard(attack_right)
     |> fn(x) { x == 1 }
-    |> bool.or(en_passant_square == attack_right)
+    |> bool.or(en_passant_square == Some(attack_right))
     |> bool.and(file < 7)
 
   [
@@ -279,6 +265,7 @@ fn create_pawn_move(
   captured_piece: Option(Piece),
 ) -> List(Move) {
   let rank = int.bitwise_shift_right(destination, 3)
+  let distance = int.absolute_value(destination - start)
 
   case rank, captured_piece {
     7, Some(piece) | 0, Some(piece) -> [
@@ -293,10 +280,7 @@ fn create_pawn_move(
       Move(Pawn, start, destination, Promotion(Bishop)),
       Move(Pawn, start, destination, Promotion(Knight)),
     ]
-    5, None if destination - start != 8 -> [
-      Move(Pawn, start, destination, EnPassant),
-    ]
-    2, None if destination - start != -8 -> [
+    5, None | 2, None if distance != 8 -> [
       Move(Pawn, start, destination, EnPassant),
     ]
     _, Some(piece) -> [Move(Pawn, start, destination, Capture(piece))]
@@ -313,22 +297,80 @@ fn create_move(
   case piece, captured_piece {
     Pawn, captured -> create_pawn_move(start, destination, captured)
     King, None if start - destination == 2 -> [
-      Move(piece, start, destination, Castle(CastleKingSide)),
+      Move(piece, start, destination, Castle(CastleQueenSide)),
     ]
     King, None if start - destination == -2 -> [
-      Move(piece, start, destination, Castle(CastleQueenSide)),
+      Move(piece, start, destination, Castle(CastleKingSide)),
     ]
     piece, None -> [Move(piece, start, destination, Normal)]
     piece, Some(target) -> [Move(piece, start, destination, Capture(target))]
   }
 }
 
-fn determine_knight_check(board_data: Board, king_location: Int) -> Bool {
-  board.get_opponent_bitboard(board_data)
+fn determine_pawn_check(
+  king_location: Int,
+  board_data: Board,
+  color: Color,
+) -> Bool {
+  let file = int.bitwise_and(king_location, 7)
+  let enemy =
+    board.get_opponent_color_bitboard(board_data, color)
+    |> int.bitwise_and(board_data.pieces.pawns)
+
+  let direction_int = case color {
+    White -> 0o1_0
+    //I want this to be a negative octal
+    Black -> -8
+  }
+
+  let forward_square = king_location + direction_int
+  let attack_left = forward_square - 1
+  let attack_right = forward_square + 1
+
+  let can_attack_left =
+    enemy
+    |> bitboard.value_on_bitboard(attack_left)
+    |> fn(x) { x == 1 }
+    |> bool.and(file > 0)
+
+  let can_attack_right =
+    enemy
+    |> bitboard.value_on_bitboard(attack_right)
+    |> fn(x) { x == 1 }
+    |> bool.and(file < 7)
+
+  can_attack_left || can_attack_right
+}
+
+fn determine_king_check(
+  king_moves: List(Int),
+  board_data: Board,
+  color: Color,
+) -> Bool {
+  board.get_opponent_color_bitboard(board_data, color)
+  |> int.bitwise_and(board_data.pieces.kings)
+  //This will generate a bitboard of all non-enemy king squares
+  |> bitboard.not()
+  |> generate_moves_from_list(king_moves, _)
+  |> fn(x) {
+    case x {
+      //If there are no enemy kings a king move away, then we cannot be in check
+      [] -> False
+      _ -> True
+    }
+  }
+}
+
+fn determine_knight_check(
+  knight_moves: List(Int),
+  board_data: Board,
+  color: Color,
+) -> Bool {
+  board.get_opponent_color_bitboard(board_data, color)
   |> int.bitwise_and(board_data.pieces.knights)
   //This will generate a bitboard of all non-enemy knight squares
   |> bitboard.not()
-  |> generate_moves_from_list(knight_moves, king_location, _)
+  |> generate_moves_from_list(knight_moves, _)
   |> fn(x) {
     case x {
       //If there are no enemy knights a knight move away, then we cannot be in check
@@ -339,14 +381,14 @@ fn determine_knight_check(board_data: Board, king_location: Int) -> Bool {
 }
 
 fn determine_bishop_check(
-  table: SlidingDictionary,
+  bishop_moves: BishopMove,
   board_data: Board,
-  king_location: Int,
-) -> Result(Bool, GenerationError) {
+  color: Color,
+) -> Bool {
   let bishop_queen =
     board_data.pieces.bishops
     |> int.bitwise_or(board_data.pieces.queens)
-    |> int.bitwise_and(board.get_opponent_bitboard(board_data))
+    |> int.bitwise_and(board.get_opponent_color_bitboard(board_data, color))
 
   let everything_else =
     board_data.pieces.white
@@ -354,52 +396,285 @@ fn determine_bishop_check(
     //This will cut out the enemy bishops and queens as they exist on the every piece bitboard
     |> int.bitwise_exclusive_or(bishop_queen)
 
-  use moves <- result.try(
-    dict.get(table, king_location) |> result.replace_error(LocationBeyond64),
-  )
-
-  let bishop_slides =
-    generate_bishop_moves([], moves.bishop, everything_else, bishop_queen)
-    |> list.fold(0, fn(bits, location) {
-      bitboard.bitboard_of(location)
-      |> int.bitwise_or(bits)
-    })
-    |> int.bitwise_and(bishop_queen)
-    |> fn(x) { x != 0 }
-    |> Ok()
+  generate_bishop_moves([], bishop_moves, everything_else, bishop_queen)
+  |> bitboard.generate_bitboard()
+  |> int.bitwise_and(bishop_queen)
+  |> fn(x) { x != 0 }
 }
 
 fn determine_rook_check(
-  table: SlidingDictionary,
+  rook_moves: RookMove,
   board_data: Board,
-  king_location: Int,
-) -> Result(Bool, GenerationError) {
+  color: Color,
+) -> Bool {
   let rook_queen =
     board_data.pieces.rooks
     |> int.bitwise_or(board_data.pieces.queens)
-    |> int.bitwise_and(board.get_opponent_bitboard(board_data))
+    |> int.bitwise_and(board.get_opponent_color_bitboard(board_data, color))
 
   let everything_else =
     board_data.pieces.white
     |> int.bitwise_or(board_data.pieces.black)
-    //This will cut out the enemy bishops and queens as they exist on the every piece bitboard
+    //This will cut out the enemy rooks and queens as they exist on the every piece bitboard
     |> int.bitwise_exclusive_or(rook_queen)
 
+  generate_rook_moves([], rook_moves, everything_else, rook_queen)
+  |> bitboard.generate_bitboard()
+  |> int.bitwise_and(rook_queen)
+  |> fn(x) { x != 0 }
+}
+
+type CheckType {
+  NoCheck
+  Single(Piece)
+  Double
+}
+
+fn determine_check(
+  table: MoveDictionary,
+  board_data: Board,
+  king_location: Int,
+  color: Color,
+) -> Result(CheckType, GenerationError) {
   use moves <- result.try(
     dict.get(table, king_location) |> result.replace_error(LocationBeyond64),
   )
 
-  let rook_slides =
-    generate_rook_moves([], moves.rook, everything_else, rook_queen)
-    |> list.fold(0, fn(bits, location) {
-      bitboard.bitboard_of(location)
-      |> int.bitwise_or(bits)
-    })
-    |> int.bitwise_and(rook_queen)
-    |> fn(x) { x != 0 }
-    |> Ok()
+  let king_check = case determine_king_check(moves.king, board_data, color) {
+    True -> 16
+    False -> 0
+  }
+  let rook_check = case determine_rook_check(moves.rook, board_data, color) {
+    True -> 8
+    False -> 0
+  }
+  let bishop_check = case
+    determine_bishop_check(moves.bishop, board_data, color)
+  {
+    True -> 4
+    False -> 0
+  }
+  let knight_check = case
+    determine_knight_check(moves.knight, board_data, color)
+  {
+    True -> 2
+    False -> 0
+  }
+  let pawn_check = case determine_pawn_check(king_location, board_data, color) {
+    True -> 1
+    False -> 0
+  }
+
+  let check = king_check + rook_check + bishop_check + knight_check + pawn_check
+  let is_not_single_check = int.bitwise_and(check, check - 1) != 0
+
+  case is_not_single_check {
+    _ if check == 0 -> Ok(NoCheck)
+    _ if is_not_single_check -> Ok(Double)
+    _ if pawn_check == 1 -> Ok(Single(Pawn))
+    _ if knight_check == 2 -> Ok(Single(Knight))
+    _ if bishop_check == 4 -> Ok(Single(Bishop))
+    _ if rook_check == 8 -> Ok(Single(Rook))
+    _ if king_check == 16 -> Ok(Single(King))
+    _ -> Error(UnknownCheck)
+  }
 }
 
-fn determine_check() {
-  todo
+pub fn in_check(table: MoveDictionary, board_data: Board, color: Color) -> Bool {
+  case color {
+    White -> board_data.pieces.white
+    Black -> board_data.pieces.black
+  }
+  |> int.bitwise_and(board_data.pieces.kings)
+  |> bit_length()
+  |> determine_check(table, board_data, _, color)
+  |> fn(check) { check != Ok(NoCheck) }
+}
+
+pub fn pseudo_legal_pawn_moves(
+  board_data: Board,
+  pawn_bitboard: BitBoard,
+  move_list: List(Move),
+) -> List(Move) {
+  use <- bool.guard(pawn_bitboard == 0, move_list)
+
+  let index =
+    bitboard.isolate_lsb(pawn_bitboard) |> bit_length() |> int.subtract(1)
+
+  let pawn_destinations =
+    generate_pawn_moves(
+      index,
+      board_data.active_color,
+      board.get_player_bitboard(board_data),
+      board.get_opponent_bitboard(board_data),
+      board_data.en_passant_square,
+    )
+
+  let moves =
+    list.flat_map(pawn_destinations, fn(destination) {
+      let captured_piece = board.get_piece_at_location(board_data, destination)
+      create_move(Pawn, index, destination, captured_piece)
+    })
+
+  pseudo_legal_pawn_moves(
+    board_data,
+    bitboard.remove_from_bitboard(pawn_bitboard, index),
+    list.append(moves, move_list),
+  )
+}
+
+pub fn pseudo_legal_knight_moves(
+  table: MoveDictionary,
+  board_data: Board,
+  knight_bitboard: BitBoard,
+  move_list: List(Move),
+) -> List(Move) {
+  use <- bool.guard(knight_bitboard == 0, move_list)
+
+  let index =
+    bitboard.isolate_lsb(knight_bitboard) |> bit_length() |> int.subtract(1)
+
+  let knight_destinations =
+    dict.get(table, index)
+    |> result.map(fn(x) {
+      x.knight
+      |> generate_moves_from_list(board.get_player_bitboard(board_data))
+    })
+    |> result.unwrap([])
+
+  let moves =
+    list.flat_map(knight_destinations, fn(destination) {
+      let captured_piece = board.get_piece_at_location(board_data, destination)
+      create_move(Knight, index, destination, captured_piece)
+    })
+
+  pseudo_legal_knight_moves(
+    table,
+    board_data,
+    bitboard.remove_from_bitboard(knight_bitboard, index),
+    list.append(moves, move_list),
+  )
+}
+
+pub fn pseudo_legal_sliding_moves(
+  table: MoveDictionary,
+  board_data: Board,
+  sliding_bitboard: BitBoard,
+  piece: Piece,
+  move_list: List(Move),
+) -> List(Move) {
+  use <- bool.guard(sliding_bitboard == 0, move_list)
+
+  let index =
+    bitboard.isolate_lsb(sliding_bitboard) |> bit_length() |> int.subtract(1)
+
+  let sliding_destinations =
+    generate_sliding_move(
+      table,
+      piece,
+      index,
+      board.get_player_bitboard(board_data),
+      board.get_opponent_bitboard(board_data),
+    )
+    |> result.unwrap([])
+
+  let moves =
+    list.flat_map(sliding_destinations, fn(destination) {
+      let captured_piece = board.get_piece_at_location(board_data, destination)
+      create_move(piece, index, destination, captured_piece)
+    })
+
+  pseudo_legal_sliding_moves(
+    table,
+    board_data,
+    bitboard.remove_from_bitboard(sliding_bitboard, index),
+    piece,
+    list.append(moves, move_list),
+  )
+}
+
+pub fn pseudo_legal_king_moves(
+  table: MoveDictionary,
+  board_data: Board,
+  king_bitboard: BitBoard,
+  move_list: List(Move),
+) -> List(Move) {
+  use <- bool.guard(king_bitboard == 0, move_list)
+
+  let index =
+    bitboard.isolate_lsb(king_bitboard)
+    |> bit_length()
+    |> int.subtract(1)
+
+  let king_destinations =
+    dict.get(table, index)
+    |> result.map(fn(x) {
+      x.king
+      |> generate_moves_from_list(board.get_player_bitboard(board_data))
+    })
+    |> result.unwrap([])
+    |> list.append(generate_castles(
+      board_data.active_color,
+      int.bitwise_or(board_data.pieces.white, board_data.pieces.black),
+      board.get_player_castling(board_data),
+    ))
+
+  let moves =
+    list.flat_map(king_destinations, fn(destination) {
+      let captured_piece = board.get_piece_at_location(board_data, destination)
+      create_move(King, index, destination, captured_piece)
+    })
+
+  pseudo_legal_king_moves(
+    table,
+    board_data,
+    bitboard.remove_from_bitboard(king_bitboard, index),
+    list.append(moves, move_list),
+  )
+}
+
+pub fn pseudo_legal_moves(
+  table: MoveDictionary,
+  board_data: Board,
+) -> List(Move) {
+  let player_bitboard = board.get_player_bitboard(board_data)
+
+  let pawns = int.bitwise_and(player_bitboard, board_data.pieces.pawns)
+  let knights = int.bitwise_and(player_bitboard, board_data.pieces.knights)
+  let bishops = int.bitwise_and(player_bitboard, board_data.pieces.bishops)
+  let rooks = int.bitwise_and(player_bitboard, board_data.pieces.rooks)
+  let queens = int.bitwise_and(player_bitboard, board_data.pieces.queens)
+  let kings = int.bitwise_and(player_bitboard, board_data.pieces.kings)
+
+  pseudo_legal_pawn_moves(board_data, pawns, [])
+  |> pseudo_legal_knight_moves(table, board_data, knights, _)
+  |> pseudo_legal_sliding_moves(table, board_data, bishops, Bishop, _)
+  |> pseudo_legal_sliding_moves(table, board_data, rooks, Rook, _)
+  |> pseudo_legal_sliding_moves(table, board_data, queens, Queen, _)
+  |> pseudo_legal_king_moves(table, board_data, kings, _)
+}
+
+pub fn get_all_moves(table: MoveDictionary, board_data: Board) -> List(Move) {
+  pseudo_legal_moves(table, board_data)
+  |> list.filter(fn(move_data) {
+    let next_board = move.move(board_data, move_data)
+
+    case move_data.data {
+      Castle(_) -> list.range(move_data.source, move_data.target)
+      _ ->
+        next_board.pieces.kings
+        |> int.bitwise_and(board.get_color_bitboard(
+          next_board,
+          board_data.active_color,
+        ))
+        |> bitboard.isolate_lsb()
+        |> bit_length()
+        |> int.subtract(1)
+        |> list.wrap()
+    }
+    |> list.all(fn(location) {
+      determine_check(table, next_board, location, board_data.active_color)
+      |> fn(x) { x == Ok(NoCheck) }
+    })
+  })
 }

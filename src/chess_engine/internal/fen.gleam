@@ -48,62 +48,69 @@ type RowData {
   RowData(locations: PieceLocations, rank: Int, file: Int)
 }
 
+fn add_item(row_data: RowData, character: String) -> RowData {
+  let location = row_data.rank * 8 + row_data.file
+
+  let locations = row_data.locations
+
+  let locations = case string.uppercase(character) == character {
+    True ->
+      PieceLocations(
+        ..locations,
+        white: bitboard.add_to_bitboard(locations.white, location),
+      )
+    False ->
+      PieceLocations(
+        ..locations,
+        black: bitboard.add_to_bitboard(locations.black, location),
+      )
+  }
+
+  let locations = case string.lowercase(character) {
+    "k" ->
+      PieceLocations(
+        ..locations,
+        kings: bitboard.add_to_bitboard(locations.kings, location),
+      )
+    "q" ->
+      PieceLocations(
+        ..locations,
+        queens: bitboard.add_to_bitboard(locations.queens, location),
+      )
+    "r" ->
+      PieceLocations(
+        ..locations,
+        rooks: bitboard.add_to_bitboard(locations.rooks, location),
+      )
+    "b" ->
+      PieceLocations(
+        ..locations,
+        bishops: bitboard.add_to_bitboard(locations.bishops, location),
+      )
+    "n" ->
+      PieceLocations(
+        ..locations,
+        knights: bitboard.add_to_bitboard(locations.knights, location),
+      )
+    "p" ->
+      PieceLocations(
+        ..locations,
+        pawns: bitboard.add_to_bitboard(locations.pawns, location),
+      )
+    _ -> locations
+  }
+
+  RowData(locations, row_data.rank, row_data.file + 1)
+}
+
 fn add_row(row_data: RowData, row_str: String) -> RowData {
   let row_complete =
     string.to_graphemes(row_str)
     |> list.fold(from: row_data, with: fn(row_data, character) {
-      let location = row_data.rank * 8 + row_data.file
-
-      let locations = row_data.locations
-
-      let locations = case string.uppercase(character) == character {
-        True ->
-          PieceLocations(
-            ..locations,
-            white: bitboard.add_to_bitboard(locations.white, location),
-          )
-        False ->
-          PieceLocations(
-            ..locations,
-            black: bitboard.add_to_bitboard(locations.white, location),
-          )
+      case int.parse(character) {
+        Ok(num) -> RowData(..row_data, file: row_data.file + num)
+        Error(_) -> add_item(row_data, character)
       }
-
-      let locations = case string.lowercase(character) {
-        "k" ->
-          PieceLocations(
-            ..locations,
-            kings: bitboard.add_to_bitboard(locations.kings, location),
-          )
-        "q" ->
-          PieceLocations(
-            ..locations,
-            queens: bitboard.add_to_bitboard(locations.queens, location),
-          )
-        "r" ->
-          PieceLocations(
-            ..locations,
-            rooks: bitboard.add_to_bitboard(locations.rooks, location),
-          )
-        "b" ->
-          PieceLocations(
-            ..locations,
-            bishops: bitboard.add_to_bitboard(locations.bishops, location),
-          )
-        "n" ->
-          PieceLocations(
-            ..locations,
-            knights: bitboard.add_to_bitboard(locations.knights, location),
-          )
-        "p" ->
-          PieceLocations(
-            ..locations,
-            pawns: bitboard.add_to_bitboard(locations.pawns, location),
-          )
-        _ -> locations
-      }
-
-      RowData(locations, row_data.rank, row_data.file - 1)
     })
 
   RowData(..row_complete, rank: row_data.rank - 1, file: row_data.file)
@@ -124,7 +131,7 @@ fn get_piece_locations(board_data: String) -> PieceLocations {
 
   let row_data =
     string.split(board_data, on: "/")
-    |> list.fold(from: RowData(locations, 7, 7), with: add_row)
+    |> list.fold(from: RowData(locations, 7, 0), with: add_row)
 
   row_data.locations
 }

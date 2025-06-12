@@ -1,4 +1,5 @@
 import gleam/int
+import gleam/list
 
 pub type BitBoard =
   Int
@@ -29,11 +30,23 @@ pub fn remove_from_bitboard(bitboard: BitBoard, location: Int) -> BitBoard {
 }
 
 pub fn value_on_bitboard(bitboard: BitBoard, at location: Int) -> Int {
-  remove_from_bitboard(bitboard, location)
-  |> int.bitwise_shift_left(location - 1)
+  bitboard_of(location)
+  |> int.bitwise_and(bitboard)
+  |> int.bitwise_shift_right(location)
 }
 
 pub fn is_on_bitboard(bitboard: BitBoard, at location: Int) -> Bool {
   value_on_bitboard(bitboard, at: location)
   |> fn(x) { x == 1 }
+}
+
+pub fn generate_bitboard(from: List(Int)) {
+  list.fold(from, 0, add_to_bitboard)
+}
+
+pub fn isolate_lsb(bitboard: BitBoard) -> BitBoard {
+  bitboard
+  |> int.bitwise_not()
+  |> int.add(1)
+  |> int.bitwise_and(bitboard)
 }

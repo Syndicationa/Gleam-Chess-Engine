@@ -94,11 +94,13 @@ fn remove_en_passanted(board_data: Board) -> Board {
     Some(square) -> {
       let board_data =
         board.get_opponent_bitboard(board_data)
-        |> bitboard.remove_from_bitboard(square)
+        |> bitboard.remove_from_bitboard(square + 8)
+        |> bitboard.remove_from_bitboard(square - 8)
         |> board.set_opponent_bitboard(board_data, _)
 
       board.get_piece_bitboard(board_data, board.Pawn)
-      |> bitboard.remove_from_bitboard(square)
+      |> bitboard.remove_from_bitboard(square + 8)
+      |> bitboard.remove_from_bitboard(square - 8)
       |> board.set_piece_bitboard(board_data, board.Pawn, _)
     }
   }
@@ -125,7 +127,7 @@ fn invalidate_castling(board_data: Board, move: Move) {
     _, _ -> None
   }
 
-  let rook_capture = case board_data.active_color, move.source {
+  let rook_capture = case board_data.active_color, move.target {
     White, 0o7_0 -> Some(CastleQueenSide)
     White, 0o7_7 -> Some(CastleKingSide)
     Black, 0o0_0 -> Some(CastleQueenSide)
@@ -191,4 +193,22 @@ fn next_player(board_data: Board) -> Board {
         move_count: board_data.move_count + 1,
       )
   }
+}
+
+fn position_to_string(locaiton: Int) {
+  case int.bitwise_shift_right(locaiton, 3), int.bitwise_and(locaiton, 7) {
+    rank, 0 -> "a" <> int.to_string(rank + 1)
+    rank, 1 -> "b" <> int.to_string(rank + 1)
+    rank, 2 -> "c" <> int.to_string(rank + 1)
+    rank, 3 -> "d" <> int.to_string(rank + 1)
+    rank, 4 -> "e" <> int.to_string(rank + 1)
+    rank, 5 -> "f" <> int.to_string(rank + 1)
+    rank, 6 -> "g" <> int.to_string(rank + 1)
+    rank, 7 -> "h" <> int.to_string(rank + 1)
+    _, _ -> "i" <> int.to_string(locaiton)
+  }
+}
+
+pub fn to_string(move: Move) -> String {
+  position_to_string(move.source) <> position_to_string(move.target)
 }

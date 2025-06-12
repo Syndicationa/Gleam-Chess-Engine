@@ -1,9 +1,16 @@
 import chess_engine/internal/bitboard.{type BitBoard}
-import gleam/option.{type Option}
+import gleam/option.{type Option, None, Some}
 
 pub type Color {
   White
   Black
+}
+
+pub fn opposite_color(color: Color) -> Color {
+  case color {
+    White -> Black
+    Black -> White
+  }
 }
 
 pub type Piece {
@@ -64,6 +71,20 @@ pub fn get_opponent_castling(board: Board) {
   }
 }
 
+pub fn get_color_bitboard(board: Board, color: Color) {
+  case color {
+    White -> board.pieces.white
+    Black -> board.pieces.black
+  }
+}
+
+pub fn get_opponent_color_bitboard(board: Board, color: Color) {
+  case color {
+    White -> board.pieces.black
+    Black -> board.pieces.white
+  }
+}
+
 pub fn get_player_bitboard(board: Board) {
   case board.active_color {
     White -> board.pieces.white
@@ -86,6 +107,25 @@ pub fn get_piece_bitboard(board: Board, piece: Piece) {
     Bishop -> board.pieces.bishops
     Knight -> board.pieces.knights
     Pawn -> board.pieces.pawns
+  }
+}
+
+pub fn get_piece_at_location(board: Board, idx: Int) -> Option(Piece) {
+  let is_pawn = bitboard.is_on_bitboard(board.pieces.pawns, idx)
+  let is_knight = bitboard.is_on_bitboard(board.pieces.knights, idx)
+  let is_bishop = bitboard.is_on_bitboard(board.pieces.bishops, idx)
+  let is_rook = bitboard.is_on_bitboard(board.pieces.rooks, idx)
+  let is_queen = bitboard.is_on_bitboard(board.pieces.queens, idx)
+  let is_king = bitboard.is_on_bitboard(board.pieces.kings, idx)
+
+  case Nil {
+    _ if is_pawn -> Some(Pawn)
+    _ if is_knight -> Some(Knight)
+    _ if is_bishop -> Some(Bishop)
+    _ if is_rook -> Some(Rook)
+    _ if is_queen -> Some(Queen)
+    _ if is_king -> Some(King)
+    _ -> None
   }
 }
 
