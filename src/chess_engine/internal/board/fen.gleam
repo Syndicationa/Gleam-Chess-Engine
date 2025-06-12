@@ -1,5 +1,5 @@
-import chess_engine/internal/bitboard
-import chess_engine/internal/board.{
+import chess_engine/internal/board/bitboard
+import chess_engine/internal/board/board.{
   type Board, type CastleState, type PieceLocations, Black, Board, Both,
   KingSide, NoCastle, PieceLocations, QueenSide, White,
 }

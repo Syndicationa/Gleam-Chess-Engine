@@ -1,13 +1,13 @@
-import chess_engine/internal/bitboard.{type BitBoard}
-import chess_engine/internal/board.{
+import chess_engine/internal/board/bitboard.{type BitBoard}
+import chess_engine/internal/board/board.{
   type Board, type CastleState, type Color, type Piece, Bishop, Black, Both,
   King, KingSide, Knight, NoCastle, Pawn, Queen, QueenSide, Rook, White,
 }
-import chess_engine/internal/move.{
+import chess_engine/internal/board/move.{
   type Move, Capture, Castle, CastleKingSide, CastleQueenSide, EnPassant, Move,
   Normal, Promotion, PromotionCapture,
 }
-import chess_engine/internal/move_dictionary.{
+import chess_engine/internal/generation/move_dictionary.{
   type BishopMove, type MoveDictionary, type RookMove,
 }
 import gleam/bool

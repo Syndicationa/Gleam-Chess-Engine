@@ -1,7 +1,7 @@
 import chess_engine
-import chess_engine/internal/board.{Knight, Pawn, Rook}
-import chess_engine/internal/fen
-import chess_engine/internal/move.{type Move, Move, Normal}
+import chess_engine/internal/board/board.{Knight, Pawn, Rook}
+import chess_engine/internal/board/fen
+import chess_engine/internal/board/move.{type Move, Move, Normal}
 import gleam/option.{None, Some}
 
 const reti: Move = Move(

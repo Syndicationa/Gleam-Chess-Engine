@@ -1,4 +1,4 @@
-import chess_engine/internal/bitboard.{type BitBoard}
+import chess_engine/internal/board/bitboard.{type BitBoard}
 import gleam/option.{type Option, None, Some}
 
 pub type Color {

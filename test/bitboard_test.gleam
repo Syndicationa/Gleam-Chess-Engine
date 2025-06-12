@@ -1,4 +1,4 @@
-import chess_engine/internal/bitboard
+import chess_engine/internal/board/bitboard
 
 pub fn is_on_bitboard_test() {
   assert bitboard.is_on_bitboard(0b111, 0)

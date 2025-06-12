@@ -1,4 +1,4 @@
-import chess_engine/internal/fen.{
+import chess_engine/internal/board/fen.{
   CastlingRightsError, EnPassantSquareError, HalfMoveCountNotNumber, InvalidFEN,
   MoveCountNotNumber,
 }

@@ -1,7 +1,7 @@
-import chess_engine/internal/board.{type Board}
-import chess_engine/internal/move
-import chess_engine/internal/move_dictionary.{type MoveDictionary}
-import chess_engine/internal/move_generation
+import chess_engine/internal/board/board.{type Board}
+import chess_engine/internal/board/move
+import chess_engine/internal/generation/move_dictionary.{type MoveDictionary}
+import chess_engine/internal/generation/move_generation
 import gleam/bool
 import gleam/int
 import gleam/list
