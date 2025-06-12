@@ -1,5 +1,6 @@
 import argv
 import chess_engine/internal/board/fen.{type CreationError}
+import chess_engine/internal/board/move
 import chess_engine/internal/generation/move_dictionary
 import chess_engine/internal/generation/move_generation
 import chess_engine/internal/perft

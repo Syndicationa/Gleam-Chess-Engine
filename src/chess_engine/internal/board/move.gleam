@@ -1,10 +1,13 @@
 import chess_engine/internal/board/bitboard
 import chess_engine/internal/board/board.{
-  type Board, type Piece, Black, Board, Both, King, KingSide, NoCastle, Pawn,
-  QueenSide, White,
+  type Board, type Piece, Bishop, Black, Board, Both, King, KingSide, Knight,
+  NoCastle, Pawn, Queen, QueenSide, Rook, White,
 }
+import chess_engine/internal/board/fen
 import gleam/int
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
+import gleam/regexp
+import gleam/result
 
 pub type CastleDirection {
   CastleKingSide
@@ -211,4 +214,172 @@ fn position_to_string(locaiton: Int) {
 
 pub fn to_string(move: Move) -> String {
   position_to_string(move.source) <> position_to_string(move.target)
+}
+
+pub type MoveReadError {
+  RegexIssue(regexp.CompileError)
+  NoMove
+  TwoMoves
+  UnknownMove(String)
+  InvalidLocation(String)
+  NoPiece
+  CannotTargetOwnPieces
+  InvalidState
+}
+
+pub fn from_string(
+  str: String,
+  board_data: Board,
+) -> Result(Move, MoveReadError) {
+  use regex <- result.try(
+    regexp.from_string("([a-h][1-8])([a-h][1-8])(?:=([QRBN]))?|O-O-O|O-O")
+    |> result.map_error(RegexIssue),
+  )
+  let matches = regexp.scan(regex, str)
+
+  echo matches
+
+  case matches {
+    [] -> Error(NoMove)
+    [match] -> from_regex(match, board_data)
+    [_, ..] -> Error(TwoMoves)
+  }
+}
+
+fn from_regex(
+  match: regexp.Match,
+  board_data: Board,
+) -> Result(Move, MoveReadError) {
+  case match.content, match.submatches {
+    _, [Some(start), Some(destination)] -> {
+      use source_int <- result.try(to_position(start))
+      use target_int <- result.try(to_position(destination))
+      let piece_result =
+        board.get_piece_at_location(board_data, source_int)
+        |> option.to_result(NoPiece)
+      use piece <- result.try(piece_result)
+
+      let is_opponent_color =
+        board.get_color_at_location(board_data, target_int)
+        == Some(board.opposite_color(board_data.active_color))
+      let target_piece = board.get_piece_at_location(board_data, target_int)
+
+      case is_opponent_color, target_piece {
+        False, Some(_) -> Error(CannotTargetOwnPieces)
+        True, None -> Error(InvalidState)
+        _, target_piece ->
+          to_move(source_int, target_int, piece, target_piece, None)
+          |> Ok
+      }
+    }
+    _, [Some(start), Some(destination), Some(promotion)] -> {
+      use source_int <- result.try(to_position(start))
+      use target_int <- result.try(to_position(destination))
+      let piece_result =
+        board.get_piece_at_location(board_data, source_int)
+        |> option.to_result(NoPiece)
+      use piece <- result.try(piece_result)
+
+      let is_opponent_color =
+        board.get_color_at_location(board_data, target_int)
+        == Some(board.opposite_color(board_data.active_color))
+      let target_piece = board.get_piece_at_location(board_data, target_int)
+
+      let promotion_piece = case promotion {
+        "Q" -> Some(Queen)
+        "R" -> Some(Rook)
+        "B" -> Some(Bishop)
+        "N" -> Some(Knight)
+        _ -> None
+      }
+
+      case is_opponent_color, target_piece {
+        False, Some(_) -> Error(CannotTargetOwnPieces)
+        True, None -> Error(InvalidState)
+        _, target_piece ->
+          to_move(source_int, target_int, piece, target_piece, promotion_piece)
+          |> Ok
+      }
+    }
+    "O-O", _ -> {
+      let #(source, target) = case board_data.active_color {
+        White -> #(4, 6)
+        Black -> #(60, 62)
+      }
+
+      Ok(Move(King, source, target, Castle(CastleKingSide)))
+    }
+    "O-O-O", _ -> {
+      let #(source, target) = case board_data.active_color {
+        White -> #(4, 2)
+        Black -> #(60, 48)
+      }
+      Ok(Move(King, source, target, Castle(CastleQueenSide)))
+    }
+    move, _ -> Error(UnknownMove(move))
+  }
+}
+
+fn to_move(
+  source: Int,
+  target: Int,
+  piece: Piece,
+  captured_piece: Option(Piece),
+  promotion: Option(Piece),
+) -> Move {
+  let distance = int.absolute_value(source - target)
+  case piece, captured_piece, promotion {
+    Pawn, None, None if distance != 8 ->
+      Move(Pawn, source, target, data: EnPassant)
+    Pawn, None, Some(promotion) ->
+      Move(Pawn, source, target, data: Promotion(promotion))
+    Pawn, Some(target_piece), Some(promotion) ->
+      Move(
+        Pawn,
+        source,
+        target,
+        data: PromotionCapture(promotion, target_piece),
+      )
+    piece, None, _ -> Move(piece, source, target, Normal)
+    piece, Some(target_piece), _ ->
+      Move(piece, source, target, Capture(target_piece))
+  }
+}
+
+fn to_position(square_name: String) -> Result(Int, MoveReadError) {
+  case square_name {
+    "a" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "b" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "c" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "d" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "e" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "f" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "g" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    "h" <> rank ->
+      int.parse(rank)
+      |> result.try(fen.location_to_int(_, 0))
+      |> result.replace_error(InvalidLocation(square_name))
+    _ -> Error(InvalidLocation(square_name))
+  }
 }

@@ -136,9 +136,9 @@ fn get_piece_locations(board_data: String) -> PieceLocations {
   row_data.locations
 }
 
-fn location_to_int(rank: Int, file: Int) -> Result(Option(Int), Nil) {
+pub fn location_to_int(rank: Int, file: Int) -> Result(Int, Nil) {
   case rank > 0 && rank < 9 {
-    True -> Ok(Some(rank - 1 + file * 8))
+    True -> Ok(rank - 1 + file * 8)
     False -> Error(Nil)
   }
 }
@@ -148,35 +148,35 @@ fn read_location(square_name: String) -> Result(Option(Int), CreationError) {
     "-" -> Ok(None)
     "a" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "b" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "c" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "d" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "e" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "f" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "g" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     "h" <> rank ->
       int.parse(rank)
-      |> result.try(location_to_int(_, 0))
+      |> result.try(fn(x) { location_to_int(x, 0) |> result.map(Some) })
       |> result.replace_error(EnPassantSquareError(square_name))
     _ -> Error(EnPassantSquareError(square_name))
   }

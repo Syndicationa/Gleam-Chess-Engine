@@ -129,6 +129,17 @@ pub fn get_piece_at_location(board: Board, idx: Int) -> Option(Piece) {
   }
 }
 
+pub fn get_color_at_location(board: Board, idx: Int) -> Option(Color) {
+  let is_white = bitboard.is_on_bitboard(board.pieces.white, idx)
+  let is_black = bitboard.is_on_bitboard(board.pieces.black, idx)
+
+  case Nil {
+    _ if is_white -> Some(White)
+    _ if is_black -> Some(Black)
+    _ -> None
+  }
+}
+
 pub fn set_player_castling(board: Board, to: CastleState) -> Board {
   case board.active_color {
     White -> Board(..board, white_castling: to)
