@@ -4,6 +4,7 @@ import chess_engine/internal/board/move.{type Move}
 import chess_engine/internal/board/print
 import chess_engine/internal/evaluation/evaluate
 import chess_engine/internal/evaluation/search.{type SearchError}
+import chess_engine/internal/evaluation/transposition.{type TranspositionTable}
 import chess_engine/internal/generation/move_dictionary.{type MoveDictionary}
 import chess_engine/internal/generation/move_generation
 
@@ -26,10 +27,18 @@ pub type GamePlayError {
   MajorSearchError(SearchError)
 }
 
-pub type GameState {
+pub type GameResult {
   Stalemate
   Over(winner: Color)
   Quit
+}
+
+type GameState {
+  GameState(
+    transposition_table: TranspositionTable,
+    dictionary: MoveDictionary,
+    board: Board,
+  )
 }
 
 type InformationRequest {
@@ -125,7 +134,7 @@ fn print_information_request(
 fn human_turn(
   dictionary: MoveDictionary,
   board_data: Board,
-) -> Result(GameState, GamePlayError) {
+) -> Result(GameResult, GamePlayError) {
   let moves = move_generation.get_all_moves(dictionary, board_data)
   let in_check =
     move_generation.in_check(dictionary, board_data, board_data.active_color)
@@ -167,7 +176,7 @@ fn print_then_human(dictionary: MoveDictionary, board_data: Board) {
 fn computer_turn(
   dictionary: MoveDictionary,
   board_data: Board,
-) -> Result(GameState, GamePlayError) {
+) -> Result(GameResult, GamePlayError) {
   let moves = move_generation.get_all_moves(dictionary, board_data)
   let in_check =
     move_generation.in_check(dictionary, board_data, board_data.active_color)
@@ -187,7 +196,7 @@ fn computer_turn(
   }
 }
 
-pub fn game(from: String) -> Result(GameState, GamePlayError) {
+pub fn game(from: String) -> Result(GameResult, GamePlayError) {
   use board <- result.try(
     fen.create_board(from) |> result.map_error(InvalidFEN),
   )
