@@ -2,6 +2,7 @@ import chess_engine/internal/board/fen.{
   CastlingRightsError, EnPassantSquareError, HalfMoveCountNotNumber, InvalidFEN,
   MoveCountNotNumber,
 }
+import gleam/option.{Some}
 import gleam/result
 
 // This is the default FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -45,4 +46,9 @@ pub fn invalid_move_count_test() {
   assert result.is_ok(board)
   assert invalid_board_half_move == Error(HalfMoveCountNotNumber)
   assert invalid_board_full_move == Error(MoveCountNotNumber)
+}
+
+pub fn square_value_test() {
+  assert fen.read_location("a1") == Ok(Some(0))
+  assert fen.read_location("b1") == Ok(Some(1))
 }

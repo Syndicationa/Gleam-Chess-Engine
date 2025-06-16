@@ -227,6 +227,19 @@ pub type MoveReadError {
   InvalidState
 }
 
+pub fn error_to_string(error: MoveReadError) -> String {
+  case error {
+    RegexIssue(_) -> "Regex Failed!"
+    NoMove -> "No move in string"
+    TwoMoves -> "Two moves in string"
+    UnknownMove(str) -> str <> " is not a known type of move"
+    InvalidLocation(str) -> str <> " is not a valid location"
+    NoPiece -> "There is no piece at this location"
+    CannotTargetOwnPieces -> "You cannot capture one of your pieces"
+    InvalidState -> "The board has reached an invalid state"
+  }
+}
+
 pub fn from_string(
   str: String,
   board_data: Board,
@@ -236,8 +249,6 @@ pub fn from_string(
     |> result.map_error(RegexIssue),
   )
   let matches = regexp.scan(regex, str)
-
-  echo matches
 
   case matches {
     [] -> Error(NoMove)
@@ -329,6 +340,8 @@ fn to_move(
 ) -> Move {
   let distance = int.absolute_value(source - target)
   case piece, captured_piece, promotion {
+    Pawn, None, None if distance == 16 ->
+      Move(Pawn, source, target, data: Normal)
     Pawn, None, None if distance != 8 ->
       Move(Pawn, source, target, data: EnPassant)
     Pawn, None, Some(promotion) ->
@@ -344,6 +357,7 @@ fn to_move(
     piece, Some(target_piece), _ ->
       Move(piece, source, target, Capture(target_piece))
   }
+  |> echo
 }
 
 fn to_position(square_name: String) -> Result(Int, MoveReadError) {
@@ -354,31 +368,31 @@ fn to_position(square_name: String) -> Result(Int, MoveReadError) {
       |> result.replace_error(InvalidLocation(square_name))
     "b" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 1))
       |> result.replace_error(InvalidLocation(square_name))
     "c" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 2))
       |> result.replace_error(InvalidLocation(square_name))
     "d" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 3))
       |> result.replace_error(InvalidLocation(square_name))
     "e" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 4))
       |> result.replace_error(InvalidLocation(square_name))
     "f" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 5))
       |> result.replace_error(InvalidLocation(square_name))
     "g" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 6))
       |> result.replace_error(InvalidLocation(square_name))
     "h" <> rank ->
       int.parse(rank)
-      |> result.try(fen.location_to_int(_, 0))
+      |> result.try(fen.location_to_int(_, 7))
       |> result.replace_error(InvalidLocation(square_name))
     _ -> Error(InvalidLocation(square_name))
   }

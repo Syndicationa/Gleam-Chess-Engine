@@ -1,9 +1,11 @@
 import argv
+import chess_engine/internal/board/board
 import chess_engine/internal/board/fen.{type CreationError}
-import chess_engine/internal/board/move
+import chess_engine/internal/board/print
 import chess_engine/internal/generation/move_dictionary
 import chess_engine/internal/generation/move_generation
 import chess_engine/internal/perft
+import chess_engine/play
 import gleam/int
 import gleam/io
 import gleam/list
@@ -13,25 +15,6 @@ import gleam/time/duration
 import gleam/time/timestamp
 
 pub const chess_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-
-pub fn play_game(from: String) -> Result(Nil, CreationError) {
-  use board <- result.try(fen.create_board(from))
-
-  let table = move_dictionary.generate_move_dict()
-
-  let now = timestamp.system_time()
-  let moves = move_generation.get_all_moves(table, board)
-  let later = timestamp.system_time()
-
-  timestamp.difference(now, later)
-  |> duration.to_seconds_and_nanoseconds
-  |> echo
-
-  list.length(moves)
-  |> echo
-
-  Ok(Nil)
-}
 
 pub type PerftError {
   FENError(CreationError)
@@ -59,13 +42,15 @@ pub fn main() -> Nil {
   case argv.load().arguments {
     //This will be the standard mode
     [] -> {
-      play_game(chess_fen)
+      play.game(chess_fen)
+
       Nil
     }
 
     //Start game from FEN string
     ["from", fen] -> {
-      play_game(fen)
+      play.game(fen)
+
       Nil
     }
     //Perform perft at depth from starting position
@@ -87,7 +72,4 @@ pub fn main() -> Nil {
       |> result.unwrap_both()
     _ -> io.println("This is not a valid run mode!")
   }
-
-  // todo
-  Nil
 }
