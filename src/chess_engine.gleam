@@ -6,6 +6,7 @@ import chess_engine/internal/generation/move_dictionary
 import chess_engine/internal/generation/move_generation
 import chess_engine/internal/perft
 import chess_engine/play
+import chess_engine/speed_test
 import gleam/int
 import gleam/io
 import gleam/list
@@ -70,6 +71,24 @@ pub fn main() -> Nil {
         Nil
       })
       |> result.unwrap_both()
+
+    //Tests the movement application speed
+    ["test", "movement"] ->
+      speed_test.movement_test(chess_fen)
+      |> result.unwrap(Nil)
+
+    //Tests the movement generation speed
+    ["test", "generation"] ->
+      speed_test.move_generation_test(
+        "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+      )
+      |> result.unwrap(Nil)
+
+    //Tests the board evaluation speed
+    ["test", "evaluation"] ->
+      speed_test.move_generation_test(chess_fen)
+      |> result.unwrap(Nil)
+
     _ -> io.println("This is not a valid run mode!")
   }
 }
