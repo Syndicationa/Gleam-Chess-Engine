@@ -1,14 +1,16 @@
 import bravo.{type BravoError}
 import bravo/uset.{type USet}
-import chess_engine/internal/board/move.{type Move}
+import chess_engine/internal/evaluation/evaluate.{type BoardValue}
 import chess_engine/internal/evaluation/zobrist.{type HashGenerator}
-import gleam/option.{type Option}
 import gleam/result
 
+// import chess_engine/internal/board/move.{type Move}
+// import gleam/option.{type Option}
+
 pub type EntryScore {
-  Exact(score: Int)
-  LowerBound(score: Int)
-  UpperBound(score: Int)
+  Exact(score: BoardValue)
+  LowerBound(score: BoardValue)
+  UpperBound(score: BoardValue)
 }
 
 pub type TranspositionEntry {
@@ -16,7 +18,7 @@ pub type TranspositionEntry {
     encoding: Int,
     depth: Int,
     score: EntryScore,
-    best_move: Option(Move),
+    // best_move: Option(Move),
   )
 }
 
@@ -27,14 +29,14 @@ pub type TranspositionTable {
   )
 }
 
-pub fn create_transposition(generator_seed seed: Int) {
+pub fn create_table(generator_seed seed: Int) {
   use table <- result.try(uset.new("Transposition", bravo.Public))
 
   TranspositionTable(generator: zobrist.create_hash(seed), table:)
   |> Ok()
 }
 
-pub fn delete_transposition(table: TranspositionTable) {
+pub fn delete_table(table: TranspositionTable) {
   uset.delete(table.table)
 }
 

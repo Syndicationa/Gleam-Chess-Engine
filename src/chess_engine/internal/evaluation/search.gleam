@@ -3,12 +3,29 @@ import chess_engine/internal/board/move.{type Move}
 import chess_engine/internal/evaluation/evaluate.{
   type BoardValue, Checkmate, Stalemate, Unrated,
 }
+import chess_engine/internal/evaluation/transposition.{
+  type TranspositionTable, Exact, LowerBound, TranspositionEntry, UpperBound,
+}
+import chess_engine/internal/evaluation/zobrist
 import chess_engine/internal/generation/move_dictionary.{type MoveDictionary}
 import chess_engine/internal/generation/move_generation
+import chess_engine/internal/helper
 import gleam/bool
 import gleam/int
+import gleam/io
 import gleam/list.{Continue, Stop}
-import gleam/order.{Lt}
+import gleam/option.{None, Some}
+import gleam/order.{Gt, Lt}
+import gleam/result
+
+pub type GameState {
+  GameState(
+    transposition: TranspositionTable,
+    dictionary: MoveDictionary,
+    board: Board,
+    hash: Int,
+  )
+}
 
 fn sort_prescore_moves(moves: List(Move)) {
   list.sort(moves, fn(move_a, move_b) {
@@ -38,8 +55,7 @@ fn update_accumulator(
 }
 
 fn negamax(
-  table: MoveDictionary,
-  board_data: Board,
+  game: GameState,
   best_score_for_us: BoardValue,
   best_score_for_them: BoardValue,
   depth: Int,
@@ -47,11 +63,35 @@ fn negamax(
 ) -> BoardValue {
   use <- bool.guard(
     depth == 0 || true_depth == 0,
-    evaluate.evaluate(table, board_data),
+    evaluate.evaluate(game.dictionary, game.board),
   )
-  let moves = move_generation.get_all_moves(table, board_data)
+
+  let previous_score = transposition.try_lookup(game.transposition, game.hash)
+
+  let good_entry = case previous_score {
+    Ok(entry) if entry.depth >= depth -> {
+      case entry.score {
+        Exact(score) -> Some(score)
+        LowerBound(score) ->
+          { evaluate.compare(score, best_score_for_them) == Gt }
+          |> helper.ternary(Some(score), None)
+        UpperBound(score) ->
+          { evaluate.compare(score, best_score_for_us) == Lt }
+          |> helper.ternary(Some(score), None)
+      }
+    }
+    _ -> None
+  }
+
+  use <- option.lazy_unwrap(good_entry)
+
+  let moves = move_generation.get_all_moves(game.dictionary, game.board)
   let in_check =
-    move_generation.in_check(table, board_data, board_data.active_color)
+    move_generation.in_check(
+      game.dictionary,
+      game.board,
+      game.board.active_color,
+    )
 
   case moves {
     [] if in_check -> Checkmate(in: 0)
@@ -60,24 +100,50 @@ fn negamax(
       let acc =
         sort_prescore_moves(moves)
         |> list.fold_until(nmacc(best_score_for_us), fn(acc, move_data) {
-          let new_board = move.move(board_data, move_data)
+          let new_board = move.move(game.board, move_data)
+          let new_hash =
+            zobrist.encode_move(
+              game.transposition.generator,
+              game.hash,
+              game.board,
+              new_board,
+              move_data,
+            )
+            //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
+            |> result.unwrap(zobrist.random(game.hash))
 
           let evaluation =
             negamax(
-              table,
-              new_board,
+              GameState(..game, board: new_board, hash: new_hash),
               evaluate.add_ply(best_score_for_them),
               evaluate.add_ply(best_score_for_us),
-              bool.guard(in_check, depth, fn() { depth - 1 }),
+              depth - 1,
               true_depth - 1,
             )
             |> evaluate.add_ply()
 
           let new_acc = update_accumulator(acc, evaluation)
 
-          case evaluate.compare(evaluation, best_score_for_them) {
-            Lt -> Continue(new_acc)
-            _ -> Stop(new_acc)
+          let better_than_theyd_allow =
+            evaluate.compare(evaluation, best_score_for_them) != Lt
+          let better_than_we_can_get =
+            evaluate.compare(evaluation, best_score_for_us) != Gt
+
+          let score = case Nil {
+            _ if better_than_theyd_allow -> LowerBound(evaluation)
+            _ if better_than_we_can_get -> UpperBound(evaluation)
+            _ -> Exact(evaluation)
+          }
+
+          transposition.save(
+            game.transposition,
+            TranspositionEntry(encoding: new_hash, depth:, score:),
+          )
+          |> result.unwrap(Nil)
+
+          case better_than_theyd_allow {
+            True -> Stop(new_acc)
+            False -> Continue(new_acc)
           }
         })
 
@@ -110,13 +176,12 @@ pub type SearchError {
 }
 
 pub fn search_at_depth(
-  table: MoveDictionary,
-  board_data: Board,
+  game: GameState,
   depth: Int,
   true_depth: Int,
 ) -> Result(Move, SearchError) {
   let move_list =
-    move_generation.get_all_moves(table, board_data)
+    move_generation.get_all_moves(game.dictionary, game.board)
     |> sort_prescore_moves()
 
   case move_list {
@@ -125,12 +190,21 @@ pub fn search_at_depth(
     [first, ..] -> {
       let accumulator =
         list.fold(move_list, search_acc(first), fn(accumulator, move_data) {
-          let new_board = move.move(board_data, move_data)
+          let new_board = move.move(game.board, move_data)
+          let new_hash =
+            zobrist.encode_move(
+              game.transposition.generator,
+              game.hash,
+              game.board,
+              new_board,
+              move_data,
+            )
+            //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
+            |> result.unwrap(zobrist.random(game.hash))
 
           let evaluation =
             negamax(
-              table,
-              new_board,
+              GameState(..game, board: new_board, hash: new_hash),
               Unrated,
               evaluate.add_ply(accumulator.best_score_for_us),
               depth - 1,

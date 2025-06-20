@@ -2,6 +2,8 @@ import chess_engine
 import chess_engine/internal/board/board.{Knight, Pawn, Rook}
 import chess_engine/internal/board/fen
 import chess_engine/internal/board/move.{type Move, Move, Normal}
+import chess_engine_test
+import gleam/bool
 import gleam/option.{None, Some}
 
 const reti: Move = Move(

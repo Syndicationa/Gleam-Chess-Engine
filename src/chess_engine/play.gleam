@@ -1,11 +1,15 @@
+import bravo.{type BravoError}
 import chess_engine/internal/board/board.{type Board, type Color, Black, White}
 import chess_engine/internal/board/fen.{type CreationError}
 import chess_engine/internal/board/move.{type Move}
 import chess_engine/internal/board/print
 import chess_engine/internal/evaluation/evaluate
-import chess_engine/internal/evaluation/search.{type SearchError}
-import chess_engine/internal/evaluation/transposition.{type TranspositionTable}
-import chess_engine/internal/generation/move_dictionary.{type MoveDictionary}
+import chess_engine/internal/evaluation/search.{
+  type GameState, type SearchError, GameState,
+}
+import chess_engine/internal/evaluation/transposition
+import chess_engine/internal/evaluation/zobrist
+import chess_engine/internal/generation/move_dictionary
 import chess_engine/internal/generation/move_generation
 
 // import chess_engine/internal/perft
@@ -17,12 +21,13 @@ import gleam/result
 import gleam/string
 import gleam/string_tree
 
-// import gleam/time/duration
-// import gleam/time/timestamp
+import gleam/time/duration
+import gleam/time/timestamp
 import input
 
 pub type GamePlayError {
   InvalidFEN(CreationError)
+  TranspositionTableFailure(BravoError)
   InvalidInput(String)
   MajorSearchError(SearchError)
 }
@@ -31,14 +36,6 @@ pub type GameResult {
   Stalemate
   Over(winner: Color)
   Quit
-}
-
-type GameState {
-  GameState(
-    transposition_table: TranspositionTable,
-    dictionary: MoveDictionary,
-    board: Board,
-  )
 }
 
 type InformationRequest {
@@ -98,7 +95,7 @@ fn read_game_input(
 }
 
 fn print_information_request(
-  board_data: Board,
+  game_state: GameState,
   move_list: List(Move),
   request: InformationRequest,
 ) {
@@ -121,45 +118,66 @@ fn print_information_request(
     All other inputs will be considered moves",
       )
     Evaluation ->
-      evaluate.board_value(board_data)
+      evaluate.board_value(game_state.board)
       |> int.to_string
       |> string.append(to: "Board evaluated at: ", suffix: _)
       |> io.println()
-    BestMove -> io.println("This feature is not ready!")
+    BestMove ->
+      search.search_at_depth(game_state, 3, 5)
+      |> result.map(move.to_string)
+      |> result.unwrap("Error was encountered")
+      |> io.println()
     PrintBoard ->
-      print.to_string(board_data, board_data.active_color) |> io.println()
+      print.to_string(game_state.board, game_state.board.active_color)
+      |> io.println()
   }
 }
 
-fn human_turn(
-  dictionary: MoveDictionary,
-  board_data: Board,
-) -> Result(GameResult, GamePlayError) {
-  let moves = move_generation.get_all_moves(dictionary, board_data)
+fn human_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
+  let moves =
+    move_generation.get_all_moves(game_state.dictionary, game_state.board)
   let in_check =
-    move_generation.in_check(dictionary, board_data, board_data.active_color)
+    move_generation.in_check(
+      game_state.dictionary,
+      game_state.board,
+      game_state.board.active_color,
+    )
 
   case moves {
     [] if in_check ->
-      Ok(Over(winner: board.opposite_color(board_data.active_color)))
+      Ok(Over(winner: board.opposite_color(game_state.board.active_color)))
     [] -> Ok(Stalemate)
     _ -> {
       let player_move =
         handle_input(
-          "Move " <> int.to_string(board_data.move_count) <> ": ",
-          read_game_input(board_data, moves, _),
+          "Move " <> int.to_string(game_state.board.move_count) <> ": ",
+          read_game_input(game_state.board, moves, _),
         )
 
       case player_move {
         InformationRequest(value) -> {
-          print_information_request(board_data, moves, value)
-          human_turn(dictionary, board_data)
+          print_information_request(game_state, moves, value)
+          human_turn(game_state)
         }
-        MoveRequest(move) ->
-          move.move(board_data, move)
-          |> computer_turn(dictionary, _)
+        MoveRequest(move) -> {
+          let new_board = move.move(game_state.board, move)
+          let new_hash =
+            zobrist.encode_move(
+              game_state.transposition.generator,
+              game_state.hash,
+              game_state.board,
+              new_board,
+              move,
+            )
+            //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
+            |> result.unwrap(zobrist.random(game_state.hash))
+
+          GameState(..game_state, board: new_board)
+          |> computer_turn()
+        }
         QuitRequest -> {
-          print.to_string(board_data, board_data.active_color) |> io.println()
+          print.to_string(game_state.board, game_state.board.active_color)
+          |> io.println()
           io.println("Will add a FEN output soon!")
           Ok(Quit)
         }
@@ -168,32 +186,64 @@ fn human_turn(
   }
 }
 
-fn print_then_human(dictionary: MoveDictionary, board_data: Board) {
-  print.to_string(board_data, board_data.active_color) |> io.println()
-  human_turn(dictionary, board_data)
+fn print_then_human(game_state: GameState) {
+  print.to_string(game_state.board, game_state.board.active_color)
+  |> io.println()
+  human_turn(game_state)
 }
 
-fn computer_turn(
-  dictionary: MoveDictionary,
-  board_data: Board,
-) -> Result(GameResult, GamePlayError) {
-  let moves = move_generation.get_all_moves(dictionary, board_data)
+fn computer_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
+  let start_time = timestamp.system_time()
+
+  let moves =
+    move_generation.get_all_moves(game_state.dictionary, game_state.board)
   let in_check =
-    move_generation.in_check(dictionary, board_data, board_data.active_color)
+    move_generation.in_check(
+      game_state.dictionary,
+      game_state.board,
+      game_state.board.active_color,
+    )
 
   case moves {
     [] if in_check ->
-      Ok(Over(winner: board.opposite_color(board_data.active_color)))
+      Ok(Over(winner: board.opposite_color(game_state.board.active_color)))
     [] -> Ok(Stalemate)
     _ -> {
       use chosen_move <- result.try(
-        search.search_at_depth(dictionary, board_data, 3, 5)
+        search.search_at_depth(game_state, 5, 5)
         |> result.map_error(MajorSearchError),
       )
-      move.move(board_data, chosen_move)
-      |> print_then_human(dictionary, _)
+
+      let now = timestamp.system_time()
+
+      timestamp.difference(start_time, now)
+      |> duration.to_seconds_and_nanoseconds()
+      |> echo
+
+      let new_board = move.move(game_state.board, chosen_move)
+      let new_hash =
+        zobrist.encode_move(
+          game_state.transposition.generator,
+          game_state.hash,
+          game_state.board,
+          new_board,
+          chosen_move,
+        )
+        //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
+        |> result.unwrap(zobrist.random(game_state.hash))
+      GameState(..game_state, board: new_board)
+      |> print_then_human()
     }
   }
+}
+
+fn after_game(transposition_table, callback) {
+  let result = callback()
+
+  transposition.delete_table(transposition_table)
+  |> result.unwrap(Nil)
+
+  result
 }
 
 pub fn game(from: String) -> Result(GameResult, GamePlayError) {
@@ -201,7 +251,17 @@ pub fn game(from: String) -> Result(GameResult, GamePlayError) {
     fen.create_board(from) |> result.map_error(InvalidFEN),
   )
 
+  use transposition <- result.try(
+    transposition.create_table(10)
+    |> result.map_error(TranspositionTableFailure),
+  )
+
+  use <- after_game(transposition)
+
   let dictionary = move_dictionary.generate_move_dict()
+  let hash = zobrist.encode_board(transposition.generator, board)
+
+  let game_state = GameState(transposition:, dictionary:, board:, hash:)
 
   let team =
     handle_input("Which side will you play(W/B)?: ", fn(str) {
@@ -213,7 +273,7 @@ pub fn game(from: String) -> Result(GameResult, GamePlayError) {
     })
 
   case board.active_color == team {
-    True -> print_then_human(dictionary, board)
-    False -> computer_turn(dictionary, board)
+    True -> print_then_human(game_state)
+    False -> computer_turn(game_state)
   }
 }

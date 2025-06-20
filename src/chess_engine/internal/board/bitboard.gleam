@@ -7,10 +7,8 @@ pub type BitBoard =
 pub const full_bitboard = 0xff_ff_ff_ff_ff_ff_ff_ff
 
 pub fn bitboard_of(location: Int) -> BitBoard {
-  case int.clamp(location, min: 0, max: 63) == location {
-    False -> 0
-    True -> int.bitwise_shift_left(1, location)
-  }
+  int.bitwise_shift_left(1, location)
+  |> int.bitwise_and(full_bitboard)
 }
 
 pub fn enforce(bitboard: BitBoard) -> BitBoard {
