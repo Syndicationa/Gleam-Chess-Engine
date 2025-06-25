@@ -48,6 +48,13 @@ pub fn move(board: Board, move: Move) -> Board {
   |> next_player()
 }
 
+pub fn run_en_passant(board: Board, move: Move) -> Board {
+  case move.data {
+    EnPassant -> remove_en_passanted(board) |> standard_move(move)
+    _ -> board
+  }
+}
+
 fn standard_move(board_data: Board, move: Move) -> Board {
   let board_data =
     board.get_player_bitboard(board_data)

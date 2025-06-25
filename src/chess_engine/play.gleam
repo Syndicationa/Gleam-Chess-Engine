@@ -137,11 +137,7 @@ fn human_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
   let moves =
     move_generation.get_all_moves(game_state.dictionary, game_state.board)
   let in_check =
-    move_generation.in_check(
-      game_state.dictionary,
-      game_state.board,
-      game_state.board.active_color,
-    )
+    move_generation.in_check(game_state.dictionary, game_state.board)
 
   case moves {
     [] if in_check ->
@@ -198,11 +194,7 @@ fn computer_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
   let moves =
     move_generation.get_all_moves(game_state.dictionary, game_state.board)
   let in_check =
-    move_generation.in_check(
-      game_state.dictionary,
-      game_state.board,
-      game_state.board.active_color,
-    )
+    move_generation.in_check(game_state.dictionary, game_state.board)
 
   case moves {
     [] if in_check ->

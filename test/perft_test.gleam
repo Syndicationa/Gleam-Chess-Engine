@@ -1,7 +1,7 @@
 import chess_engine
-import chess_engine/internal/board/board.{Knight, Pawn}
+import chess_engine/internal/board/board.{King, Knight, Pawn, Queen}
 import chess_engine/internal/board/fen
-import chess_engine/internal/board/move.{type Move, Move, Normal}
+import chess_engine/internal/board/move.{type Move, Capture, Move, Normal}
 import chess_engine/internal/perft
 import gleam/option.{None}
 
@@ -83,6 +83,69 @@ const e2e4 = Move(piece: Pawn, source: 0o1_4, target: 0o3_4, data: Normal)
 
 const c7c6 = Move(piece: Pawn, source: 0o6_2, target: 0o5_2, data: Normal)
 
+const e5d7_kiwi = Move(
+  piece: Knight,
+  source: 0o4_4,
+  target: 0o6_3,
+  data: Capture(Pawn),
+)
+
+const c3b1_kiwi = Move(
+  piece: Knight,
+  source: 0o2_2,
+  target: 0o0_1,
+  data: Normal,
+)
+
+const e1f1_kiwi = Move(piece: King, source: 0o0_4, target: 0o0_5, data: Normal)
+
+const e1d2_pos_5 = Move(piece: King, source: 0o0_4, target: 0o1_3, data: Normal)
+
+const d8d7_pos_5 = Move(
+  piece: Queen,
+  source: 0o7_3,
+  target: 0o6_3,
+  data: Capture(Pawn),
+)
+
+const e2g1_pos_5 = Move(
+  piece: Knight,
+  source: 0o1_4,
+  target: 0o0_6,
+  data: Normal,
+)
+
+const d8a5_pos_5 = Move(
+  piece: Queen,
+  source: 0o7_3,
+  target: 0o4_0,
+  data: Normal,
+)
+
+pub fn kiwipete_e1f1_test() {
+  let assert Ok(board) = fen.create_board(kiwipete)
+
+  let e1f1 = board |> move.move(e1f1_kiwi)
+
+  assert perft.perft(e1f1, 2) == 1855 as "Depth 2"
+}
+
+pub fn kiwipete_c3b1_test() {
+  let assert Ok(board) = fen.create_board(kiwipete)
+
+  let c3b1 = board |> move.move(c3b1_kiwi)
+
+  assert perft.perft(c3b1, 2) == 2038 as "Depth 2"
+}
+
+pub fn kiwipete_c3b1_b4b3_test() {
+  let assert Ok(board) = fen.create_board(kiwipete)
+
+  let b4b3 = board |> move.move(c3b1_kiwi) |> move.move(b4b3)
+
+  assert perft.perft(b4b3, 1) == 50 as "Depth 1"
+}
+
 pub fn kiwipete_a2a3_test() {
   let assert Ok(board) = fen.create_board(kiwipete)
 
@@ -102,6 +165,13 @@ pub fn kiwipete_b4b3_test() {
 
   let b4b3 = board |> move.move(d5d6) |> move.move(b4b3)
   assert perft.perft(b4b3, 1) == 50 as "Depth 1"
+}
+
+pub fn kiwipete_e5d7_test() {
+  let assert Ok(board) = fen.create_board(kiwipete)
+
+  let e5d7 = board |> move.move(e5d7_kiwi)
+  assert perft.perft(e5d7, 1) == 45 as "Depth 1"
 }
 
 pub fn pos3_e2e4_test() {
@@ -125,7 +195,39 @@ pub fn pos5_a2a3_test() {
 
   let a2a3 = board |> move.move(a2a3)
 
-  assert perft.perft(a2a3, 2) == 1373 as "Depth 1"
+  assert perft.perft(a2a3, 2) == 1373 as "Depth 2"
+}
+
+pub fn pos5_e1d2_test() {
+  let assert Ok(board) = fen.create_board(position_5)
+
+  let e1d2 = board |> move.move(e1d2_pos_5)
+
+  assert perft.perft(e1d2, 2) == 978 as "Depth 2"
+}
+
+pub fn pos5_d8d7_test() {
+  let assert Ok(board) = fen.create_board(position_5)
+
+  let d8d7 = board |> move.move(e1d2_pos_5) |> move.move(d8d7_pos_5)
+
+  assert perft.perft(d8d7, 1) == 6 as "Depth 1"
+}
+
+pub fn pos5_e2g1_test() {
+  let assert Ok(board) = fen.create_board(position_5)
+
+  let e2g1 = board |> move.move(e2g1_pos_5)
+
+  assert perft.perft(e2g1, 2) == 1431 as "Depth 2"
+}
+
+pub fn pos5_d8a5_test() {
+  let assert Ok(board) = fen.create_board(position_5)
+
+  let d8a5 = board |> move.move(e2g1_pos_5) |> move.move(d8a5_pos_5)
+
+  assert perft.perft(d8a5, 1) == 9 as "Depth 1"
 }
 
 pub fn from_reti_test() {
@@ -144,3 +246,4 @@ pub fn rook_slide_test() {
   let assert Ok(board) = fen.create_board("k1K5/8/8/8/8/8/8/7R w - - 0 1")
   assert perft.perft(board, 1) == 17 as "Example"
 }
+// const useful = 1

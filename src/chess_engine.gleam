@@ -1,19 +1,12 @@
 import argv
-import chess_engine/internal/board/board
 import chess_engine/internal/board/fen.{type CreationError}
-import chess_engine/internal/board/print
-import chess_engine/internal/generation/move_dictionary
-import chess_engine/internal/generation/move_generation
 import chess_engine/internal/perft
 import chess_engine/play
 import chess_engine/speed_test
 import gleam/int
 import gleam/io
-import gleam/list
 import gleam/result
 import gleam/string
-import gleam/time/duration
-import gleam/time/timestamp
 
 pub const chess_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -43,14 +36,14 @@ pub fn main() -> Nil {
   case argv.load().arguments {
     //This will be the standard mode
     [] -> {
-      play.game(chess_fen)
+      let _ = play.game(chess_fen)
 
       Nil
     }
 
     //Start game from FEN string
     ["from", fen] -> {
-      play.game(fen)
+      let _ = play.game(fen)
 
       Nil
     }

@@ -155,12 +155,7 @@ fn evaluate_position(moves: List(Move), board_data: Board) {
 
 pub fn evaluate(move_dictionary: MoveDictionary, board_data: Board) {
   let moves = move_generation.get_all_moves(move_dictionary, board_data)
-  let is_check =
-    move_generation.in_check(
-      move_dictionary,
-      board_data,
-      board_data.active_color,
-    )
+  let is_check = move_generation.in_check(move_dictionary, board_data)
 
   case moves, is_check {
     [], True -> Checkmate(in: 0)

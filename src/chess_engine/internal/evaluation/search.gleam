@@ -86,12 +86,7 @@ fn negamax(
   use <- option.lazy_unwrap(good_entry)
 
   let moves = move_generation.get_all_moves(game.dictionary, game.board)
-  let in_check =
-    move_generation.in_check(
-      game.dictionary,
-      game.board,
-      game.board.active_color,
-    )
+  let in_check = move_generation.in_check(game.dictionary, game.board)
 
   case moves {
     [] if in_check -> Checkmate(in: 0)
