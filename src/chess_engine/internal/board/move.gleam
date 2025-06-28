@@ -219,8 +219,27 @@ fn position_to_string(locaiton: Int) {
   }
 }
 
+fn piece_to_string(piece: Piece) -> String {
+  case piece {
+    Queen -> "q"
+    Rook -> "r"
+    Bishop -> "b"
+    Knight -> "n"
+    _ -> ""
+  }
+}
+
 pub fn to_string(move: Move) -> String {
-  position_to_string(move.source) <> position_to_string(move.target)
+  case move.data {
+    Normal | Capture(_) | EnPassant ->
+      position_to_string(move.source) <> position_to_string(move.target)
+    Castle(CastleKingSide) -> "O-O"
+    Castle(CastleQueenSide) -> "O-O-O"
+    Promotion(target) | PromotionCapture(target, _) ->
+      position_to_string(move.source)
+      <> position_to_string(move.target)
+      <> piece_to_string(target)
+  }
 }
 
 pub type MoveReadError {
@@ -252,7 +271,7 @@ pub fn from_string(
   board_data: Board,
 ) -> Result(Move, MoveReadError) {
   use regex <- result.try(
-    regexp.from_string("([a-h][1-8])([a-h][1-8])(?:=([QRBN]))?|O-O-O|O-O")
+    regexp.from_string("([a-h][1-8])([a-h][1-8])=?([QRBNqrbn]?)|O-O-O|O-O")
     |> result.map_error(RegexIssue),
   )
   let matches = regexp.scan(regex, str)
@@ -269,7 +288,7 @@ fn from_regex(
   board_data: Board,
 ) -> Result(Move, MoveReadError) {
   case match.content, match.submatches {
-    _, [Some(start), Some(destination)] -> {
+    _, [Some(start), Some(destination), None] -> {
       use source_int <- result.try(to_position(start))
       use target_int <- result.try(to_position(destination))
       let piece_result =
@@ -286,7 +305,7 @@ fn from_regex(
         False, Some(_) -> Error(CannotTargetOwnPieces)
         True, None -> Error(InvalidState)
         _, target_piece ->
-          to_move(source_int, target_int, piece, target_piece, None)
+          to_move(board_data, source_int, target_int, piece, target_piece, None)
           |> Ok
       }
     }
@@ -315,7 +334,14 @@ fn from_regex(
         False, Some(_) -> Error(CannotTargetOwnPieces)
         True, None -> Error(InvalidState)
         _, target_piece ->
-          to_move(source_int, target_int, piece, target_piece, promotion_piece)
+          to_move(
+            board_data,
+            source_int,
+            target_int,
+            piece,
+            target_piece,
+            promotion_piece,
+          )
           |> Ok
       }
     }
@@ -330,7 +356,7 @@ fn from_regex(
     "O-O-O", _ -> {
       let #(source, target) = case board_data.active_color {
         White -> #(4, 2)
-        Black -> #(60, 48)
+        Black -> #(60, 58)
       }
       Ok(Move(King, source, target, Castle(CastleQueenSide)))
     }
@@ -338,18 +364,17 @@ fn from_regex(
   }
 }
 
-fn to_move(
+pub fn to_move(
+  board_data: Board,
   source: Int,
   target: Int,
   piece: Piece,
   captured_piece: Option(Piece),
   promotion: Option(Piece),
 ) -> Move {
-  let distance = int.absolute_value(source - target)
+  let distance = source - target
   case piece, captured_piece, promotion {
-    Pawn, None, None if distance == 16 ->
-      Move(Pawn, source, target, data: Normal)
-    Pawn, None, None if distance != 8 ->
+    Pawn, None, None if Some(target) == board_data.en_passant_square ->
       Move(Pawn, source, target, data: EnPassant)
     Pawn, None, Some(promotion) ->
       Move(Pawn, source, target, data: Promotion(promotion))
@@ -360,14 +385,28 @@ fn to_move(
         target,
         data: PromotionCapture(promotion, target_piece),
       )
+    King, None, None if distance == -2 -> {
+      let #(source, target) = case board_data.active_color {
+        White -> #(4, 2)
+        Black -> #(60, 58)
+      }
+      Move(King, source, target, Castle(CastleQueenSide))
+    }
+    King, None, None if distance == 2 -> {
+      let #(source, target) = case board_data.active_color {
+        White -> #(4, 6)
+        Black -> #(60, 62)
+      }
+
+      Move(King, source, target, Castle(CastleKingSide))
+    }
     piece, None, _ -> Move(piece, source, target, Normal)
     piece, Some(target_piece), _ ->
       Move(piece, source, target, Capture(target_piece))
   }
-  |> echo
 }
 
-fn to_position(square_name: String) -> Result(Int, MoveReadError) {
+pub fn to_position(square_name: String) -> Result(Int, MoveReadError) {
   case square_name {
     "a" <> rank ->
       int.parse(rank)

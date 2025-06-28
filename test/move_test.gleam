@@ -1,9 +1,6 @@
-import chess_engine
 import chess_engine/internal/board/board.{Knight, Pawn, Rook}
 import chess_engine/internal/board/fen
 import chess_engine/internal/board/move.{type Move, Move, Normal}
-import chess_engine_test
-import gleam/bool
 import gleam/option.{None, Some}
 
 const reti: Move = Move(
@@ -28,7 +25,7 @@ const black_null_move: Move = Move(
 )
 
 pub fn move_test() {
-  let assert Ok(board) = fen.create_board(chess_engine.chess_fen)
+  let assert Ok(board) = fen.create_board(fen.default_fen)
   let reti_then_pawn =
     board
     |> move.move(reti)
@@ -46,7 +43,7 @@ pub fn move_test() {
 }
 
 pub fn en_passant_test() {
-  let assert Ok(board) = fen.create_board(chess_engine.chess_fen)
+  let assert Ok(board) = fen.create_board(fen.default_fen)
   let pawn_two_squares =
     board
     |> move.move(kings_pawn)

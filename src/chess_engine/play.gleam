@@ -1,4 +1,5 @@
 import bravo.{type BravoError}
+import chess_engine/internal/board/algebraic_notation
 import chess_engine/internal/board/board.{type Board, type Color, Black, White}
 import chess_engine/internal/board/fen.{type CreationError}
 import chess_engine/internal/board/move.{type Move}
@@ -21,8 +22,6 @@ import gleam/result
 import gleam/string
 import gleam/string_tree
 
-import gleam/time/duration
-import gleam/time/timestamp
 import input
 
 pub type GamePlayError {
@@ -83,10 +82,16 @@ fn read_game_input(
     "print" -> InformationRequest(PrintBoard) |> Ok
     "q" | "quit" -> QuitRequest |> Ok
     _ -> {
-      use move <- result.try(
+      let standard_move =
         move.from_string(str, board_data)
-        |> result.map_error(move.error_to_string),
-      )
+        |> result.map_error(move.error_to_string)
+
+      let algebraic_move =
+        algebraic_notation.create_move(board_data, str, move_list)
+        |> result.map_error(move.error_to_string)
+
+      use move <- result.try(result.or(standard_move, algebraic_move))
+
       list.find(move_list, fn(x) { x == move })
       |> result.replace_error("Move is not allowed!")
       |> result.map(MoveRequest)
@@ -168,7 +173,7 @@ fn human_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
             //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
             |> result.unwrap(zobrist.random(game_state.hash))
 
-          GameState(..game_state, board: new_board)
+          GameState(..game_state, board: new_board, hash: new_hash)
           |> computer_turn()
         }
         QuitRequest -> {
@@ -189,8 +194,6 @@ fn print_then_human(game_state: GameState) {
 }
 
 fn computer_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
-  let start_time = timestamp.system_time()
-
   let moves =
     move_generation.get_all_moves(game_state.dictionary, game_state.board)
   let in_check =
@@ -202,15 +205,12 @@ fn computer_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
     [] -> Ok(Stalemate)
     _ -> {
       use chosen_move <- result.try(
-        search.search_at_depth(game_state, 5, 5)
+        search.search_for_time(game_state, 2000, 135)
         |> result.map_error(MajorSearchError),
       )
 
-      let now = timestamp.system_time()
-
-      timestamp.difference(start_time, now)
-      |> duration.to_seconds_and_nanoseconds()
-      |> echo
+      echo chosen_move
+      io.println(move.to_string(chosen_move))
 
       let new_board = move.move(game_state.board, chosen_move)
       let new_hash =
@@ -223,7 +223,7 @@ fn computer_turn(game_state: GameState) -> Result(GameResult, GamePlayError) {
         )
         //This unwrap should never happen, but if it does, using a random new hash would move the state randomly is the area
         |> result.unwrap(zobrist.random(game_state.hash))
-      GameState(..game_state, board: new_board)
+      GameState(..game_state, board: new_board, hash: new_hash)
       |> print_then_human()
     }
   }
@@ -249,6 +249,13 @@ pub fn game(from: String) -> Result(GameResult, GamePlayError) {
   )
 
   use <- after_game(transposition)
+
+  let did_build_book = transposition.fill_table_with_book(transposition)
+
+  case did_build_book {
+    Ok(_) -> io.println("Built Book!\n")
+    Error(s) -> io.println("Failed to build book due to " <> s)
+  }
 
   let dictionary = move_dictionary.generate_move_dict()
   let hash = zobrist.encode_board(transposition.generator, board)

@@ -9,6 +9,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 
+pub const default_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 pub type FENData {
   FEN(
     layout: String,

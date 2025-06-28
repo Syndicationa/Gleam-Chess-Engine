@@ -1,5 +1,6 @@
 import argv
 import chess_engine/internal/board/fen.{type CreationError}
+import chess_engine/internal/book_database
 import chess_engine/internal/perft
 import chess_engine/play
 import chess_engine/speed_test
@@ -7,8 +8,6 @@ import gleam/int
 import gleam/io
 import gleam/result
 import gleam/string
-
-pub const chess_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 pub type PerftError {
   FENError(CreationError)
@@ -36,7 +35,7 @@ pub fn main() -> Nil {
   case argv.load().arguments {
     //This will be the standard mode
     [] -> {
-      let _ = play.game(chess_fen)
+      let _ = play.game(fen.default_fen)
 
       Nil
     }
@@ -49,7 +48,7 @@ pub fn main() -> Nil {
     }
     //Perform perft at depth from starting position
     ["perft", depth] ->
-      perform_perft(chess_fen, depth)
+      perform_perft(fen.default_fen, depth)
       |> result.map_error(fn(e) {
         echo e
         Nil
@@ -67,7 +66,7 @@ pub fn main() -> Nil {
 
     //Tests the movement application speed
     ["test", "movement"] ->
-      speed_test.movement_test(chess_fen)
+      speed_test.movement_test(fen.default_fen)
       |> result.unwrap(Nil)
 
     //Tests the movement generation speed
@@ -79,7 +78,12 @@ pub fn main() -> Nil {
 
     //Tests the board evaluation speed
     ["test", "evaluation"] ->
-      speed_test.move_generation_test(chess_fen)
+      speed_test.move_generation_test(fen.default_fen)
+      |> result.unwrap(Nil)
+
+    ["build", "book"] ->
+      book_database.convert_game()
+      |> echo
       |> result.unwrap(Nil)
 
     _ -> io.println("This is not a valid run mode!")

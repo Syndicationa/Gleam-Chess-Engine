@@ -1,6 +1,7 @@
 import gleam/bool
 import gleam/int
 import gleam/list
+import gleam/result
 
 pub type BitBoard =
   Int
@@ -104,6 +105,30 @@ pub fn fold(
     //Remove the LSB
     int.bitwise_exclusive_or(bb, lsb),
     f(acc, idx),
+    f,
+  )
+}
+
+pub fn fold_with(
+  bitboard bb: BitBoard,
+  list list: List(a),
+  replace_value rep: a,
+  initial acc: generic,
+  folder f: fn(generic, Int, a) -> generic,
+) -> generic {
+  use <- bool.guard(bb == 0, acc)
+
+  let lsb = isolate_lsb(bb)
+  let idx = get_index(lsb)
+
+  let item = list.drop(list, idx) |> list.first() |> result.unwrap(rep)
+
+  fold_with(
+    //Remove the LSB
+    int.bitwise_exclusive_or(bb, lsb),
+    list,
+    rep,
+    f(acc, idx, item),
     f,
   )
 }

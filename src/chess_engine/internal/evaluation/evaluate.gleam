@@ -1,10 +1,11 @@
 import chess_engine/internal/board/bitboard.{type BitBoard}
 import chess_engine/internal/board/board.{
-  type Board, type Color, type Piece, Bishop, Knight, Pawn, Queen, Rook,
+  type Board, type Color, type Piece, Bishop, King, Knight, Pawn, Queen, Rook,
 }
 import chess_engine/internal/board/move.{
   type Move, Capture, Castle, EnPassant, Promotion, PromotionCapture,
 }
+import chess_engine/internal/evaluation/positions
 import chess_engine/internal/generation/move_dictionary.{type MoveDictionary}
 import chess_engine/internal/generation/move_generation
 import gleam/bool
@@ -16,6 +17,7 @@ pub type BoardValue {
   Unrated
   Value(at: Int)
   Checkmate(in: Int)
+  BookMove(count: Int)
   Stalemate
 }
 
@@ -43,6 +45,8 @@ pub fn compare(first, second) {
     }
     _, Checkmate(count) ->
       int.bitwise_and(count, 1) |> int.multiply(2) |> int.compare(1)
+    BookMove(_), BookMove(_) -> Eq
+    BookMove(_), _ -> Gt
     a, b -> compare(b, a)
   }
 }
@@ -61,17 +65,18 @@ pub fn add_ply(eval: BoardValue) {
     Value(x) -> Value(-x)
     Stalemate -> Stalemate
     Checkmate(x) -> Checkmate(x + 1)
+    BookMove(x) -> BookMove(x)
   }
 }
 
 pub fn piece_value(piece: Piece) -> Int {
   case piece {
-    Queen -> 90
-    Rook -> 50
-    Bishop -> 30
-    Knight -> 30
-    Pawn -> 10
-    _ -> 0
+    Queen -> 900
+    Rook -> 500
+    Bishop -> 300
+    Knight -> 300
+    Pawn -> 100
+    _ -> 00
   }
 }
 
@@ -82,40 +87,187 @@ pub fn bit_count(source: BitBoard, running_count: Int) {
   bit_count(source - lsb, running_count + 1)
 }
 
+fn mg_side_value(board_data: Board, side: Color) {
+  let side_board = board.get_color_bitboard(board_data, side)
+  let king = int.bitwise_and(board_data.pieces.kings, side_board)
+  let queens = int.bitwise_and(board_data.pieces.queens, side_board)
+  let rooks = int.bitwise_and(board_data.pieces.rooks, side_board)
+  let bishops = int.bitwise_and(board_data.pieces.bishops, side_board)
+  let knights = int.bitwise_and(board_data.pieces.knights, side_board)
+  let pawns = int.bitwise_and(board_data.pieces.pawns, side_board)
+
+  let king_value =
+    bitboard.fold_with(
+      king,
+      positions.mg_king_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(king, 0)
+    * piece_value(King)
+
+  let queen_value =
+    bitboard.fold_with(
+      queens,
+      positions.mg_queen_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(queens, 0)
+    * piece_value(Queen)
+
+  let rook_value =
+    bitboard.fold_with(
+      rooks,
+      positions.mg_rook_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(rooks, 0)
+    * piece_value(Rook)
+
+  let bishop_value =
+    bitboard.fold_with(
+      bishops,
+      positions.mg_bishop_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(bishops, 0)
+    * piece_value(Bishop)
+
+  let knight_value =
+    bitboard.fold_with(
+      knights,
+      positions.mg_knight_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(knights, 0)
+    * piece_value(Knight)
+
+  let pawn_value =
+    bitboard.fold_with(
+      pawns,
+      positions.mg_pawn_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(pawns, 0)
+    * piece_value(Pawn)
+
+  king_value
+  + queen_value
+  + rook_value
+  + bishop_value
+  + knight_value
+  + pawn_value
+}
+
+fn eg_side_value(board_data: Board, side: Color) {
+  let side_board = board.get_color_bitboard(board_data, side)
+  let king = int.bitwise_and(board_data.pieces.kings, side_board)
+  let queens = int.bitwise_and(board_data.pieces.queens, side_board)
+  let rooks = int.bitwise_and(board_data.pieces.rooks, side_board)
+  let bishops = int.bitwise_and(board_data.pieces.bishops, side_board)
+  let knights = int.bitwise_and(board_data.pieces.knights, side_board)
+  let pawns = int.bitwise_and(board_data.pieces.pawns, side_board)
+
+  let king_value =
+    bitboard.fold_with(
+      king,
+      positions.eg_king_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(king, 0)
+    * piece_value(King)
+
+  let queen_value =
+    bitboard.fold_with(
+      queens,
+      positions.eg_queen_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(queens, 0)
+    * piece_value(Queen)
+
+  let rook_value =
+    bitboard.fold_with(
+      rooks,
+      positions.eg_rook_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(rooks, 0)
+    * piece_value(Rook)
+
+  let bishop_value =
+    bitboard.fold_with(
+      bishops,
+      positions.eg_bishop_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(bishops, 0)
+    * piece_value(Bishop)
+
+  let knight_value =
+    bitboard.fold_with(
+      knights,
+      positions.eg_knight_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(knights, 0)
+    * piece_value(Knight)
+
+  let pawn_value =
+    bitboard.fold_with(
+      pawns,
+      positions.eg_pawn_table,
+      0,
+      0,
+      fn(acc, _, square_value) { acc + square_value },
+    )
+    + bit_count(pawns, 0)
+    * piece_value(Pawn)
+
+  king_value
+  + queen_value
+  + rook_value
+  + bishop_value
+  + knight_value
+  + pawn_value
+}
+
 fn side_value(board_data: Board, side: Color) {
-  let queens =
-    int.bitwise_and(
-      board.get_color_bitboard(board_data, side),
-      board_data.pieces.queens,
+  let is_end_game =
+    board_data.pieces.queens == 0
+    || bit_count(
+      board_data.pieces.knights
+        + board_data.pieces.bishops
+        + board_data.pieces.queens,
+      0,
     )
-  let rooks =
-    int.bitwise_and(
-      board.get_color_bitboard(board_data, side),
-      board_data.pieces.rooks,
-    )
-  let bishops =
-    int.bitwise_and(
-      board.get_color_bitboard(board_data, side),
-      board_data.pieces.bishops,
-    )
-  let knights =
-    int.bitwise_and(
-      board.get_color_bitboard(board_data, side),
-      board_data.pieces.knights,
-    )
-  let pawns =
-    int.bitwise_and(
-      board.get_color_bitboard(board_data, side),
-      board_data.pieces.pawns,
-    )
+    <= 6
 
-  let queens = bit_count(queens, 0) * 90
-  let rooks = bit_count(rooks, 0) * 50
-  let bishops = bit_count(bishops, 0) * 30
-  let knights = bit_count(knights, 0) * 30
-  let pawns = bit_count(pawns, 0) * 10
-
-  queens + rooks + bishops + knights + pawns
+  case is_end_game {
+    True -> eg_side_value(board_data, side)
+    False -> mg_side_value(board_data, side)
+  }
 }
 
 pub fn board_value(board_data: Board) -> Int {
